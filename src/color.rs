@@ -81,11 +81,16 @@ pub fn build_palette(cc: ColorCount) -> Vec<Rgb> {
 pub fn nearest_color(palette: &[Rgb], obs: Rgb) -> u8 {
     let mut best_idx = 0u8;
     let mut best_dist = u32::MAX;
-    for (i, &c) in palette.iter().enumerate() {
-        let d = c.distance_sq(obs);
+    let (r, g, b) = (obs.0 as i32, obs.1 as i32, obs.2 as i32);
+    for (i, c) in palette.iter().enumerate() {
+        let dr = c.0 as i32 - r;
+        let dg = c.1 as i32 - g;
+        let db = c.2 as i32 - b;
+        let d = (dr * dr + dg * dg + db * db) as u32;
         if d < best_dist {
             best_dist = d;
             best_idx = i as u8;
+            if d == 0 { break; }
         }
     }
     best_idx

@@ -98,18 +98,21 @@ pub fn build_matrix(cfg: &JabConfig, encoded_modules: &[u8], data_len: usize) ->
 pub fn render_rgba(mat: &JabMatrix, module_px: u32, palette: &[crate::color::Rgb]) -> Vec<u8> {
     let side_px = mat.side * module_px as usize;
     let mut pixels = vec![255u8; side_px * side_px * 4]; // RGBA
+    let mpx = module_px as usize;
     for r in 0..mat.side {
+        let pr = r * mpx;
         for c in 0..mat.side {
             let color_idx = mat.get(r, c) as usize;
             let rgb = palette.get(color_idx).copied().unwrap_or(crate::color::Rgb(0,0,0));
-            let pr = r * module_px as usize;
-            let pc = c * module_px as usize;
-            for dy in 0..module_px as usize {
-                for dx in 0..module_px as usize {
-                    let pix = ((pr + dy) * side_px + (pc + dx)) * 4;
-                    pixels[pix]     = rgb.0;
-                    pixels[pix + 1] = rgb.1;
-                    pixels[pix + 2] = rgb.2;
+            let pc = c * mpx;
+            let (rv, gv, bv) = (rgb.0, rgb.1, rgb.2);
+            for dy in 0..mpx {
+                let row_start = ((pr + dy) * side_px + pc) * 4;
+                for dx in 0..mpx {
+                    let pix = row_start + dx * 4;
+                    pixels[pix]     = rv;
+                    pixels[pix + 1] = gv;
+                    pixels[pix + 2] = bv;
                     pixels[pix + 3] = 255;
                 }
             }

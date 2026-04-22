@@ -43,6 +43,9 @@ pub fn sample_modules(
     let ap_pos  = pattern::alignment_positions(side);
     let mut out = Vec::with_capacity(side * side);
 
+    // Precompute i32 palette for faster distance calc
+    let palette_i32: Vec<(i32, i32, i32)> = palette.iter().map(|c| (c.0 as i32, c.1 as i32, c.2 as i32)).collect();
+
     for r in 0..side {
         for c in 0..side {
             if pattern::is_reserved(r, c, side, &ap_pos) {
@@ -59,8 +62,21 @@ pub fn sample_modules(
                 out.push(0);
                 continue;
             }
-            let obs = Rgb(rgba[idx], rgba[idx + 1], rgba[idx + 2]);
-            out.push(nearest_color(palette, obs));
+            let (obsr, obsg, obsb) = (rgba[idx] as i32, rgba[idx + 1] as i32, rgba[idx + 2] as i32);
+            let mut best_idx = 0u8;
+            let mut best_dist = i32::MAX;
+            for (i, &(pr, pg, pb)) in palette_i32.iter().enumerate() {
+                let dr = pr - obsr;
+                let dg = pg - obsg;
+                let db = pb - obsb;
+                let d = dr * dr + dg * dg + db * db;
+                if d < best_dist {
+                    best_dist = d;
+                    best_idx = i as u8;
+                    if d == 0 { break; }
+                }
+            }
+            out.push(best_idx);
         }
     }
     out

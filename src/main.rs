@@ -4,8 +4,9 @@ use std::{env, fs, io::{self, Read, Write}, path::Path};
 fn usage() {
     eprintln!(
         "Usage:\n\
-         b encode [--colors N] [--ecc 0-3] [--module-px N] <infile> <outfile.[png|rgba]>\n\
-         b decode [--colors N] [--ecc 0-3] [--module-px N] <infile.[png|rgba]> <outfile>\n\n\
+         b encode [--colors N] [--ecc 0-3] [--module-px N] <infile|-> <outfile.[png|rgba]|->\n\
+         b decode [--colors N] [--ecc 0-3] [--module-px N] <infile.[png|rgba]> <outfile|->\n\n\
+         Use '-' for stdin/stdout\n\
          Supported output formats: .png, .rgba (raw RGBA with 8-byte header)"
     );
 }
@@ -75,19 +76,26 @@ fn main() -> io::Result<()> {
             let (rgba, w, h) = encode_rgba(&data, &cfg).expect("encode failed");
 
             let outpath = &pos_args[1];
-            let ext = Path::new(outpath).extension().and_then(|s| s.to_str()).unwrap_or("");
 
-            match ext.to_lowercase().as_str() {
-                "png" => {
-                    write_png(outpath, &rgba, w, h)?;
-                    eprintln!("encoded → {} × {} px (PNG)", w, h);
-                }
-                _ => {
-                    let mut out = fs::File::create(outpath)?;
-                    out.write_all(&w.to_le_bytes())?;
-                    out.write_all(&h.to_le_bytes())?;
-                    out.write_all(&rgba)?;
-                    eprintln!("encoded → {} × {} px ({} bytes RGBA)", w, h, rgba.len());
+            if outpath == "-" {
+                io::stdout().write_all(&w.to_le_bytes())?;
+                io::stdout().write_all(&h.to_le_bytes())?;
+                io::stdout().write_all(&rgba)?;
+                eprintln!("encoded → {} × {} px ({} bytes RGBA)", w, h, rgba.len());
+            } else {
+                let ext = Path::new(outpath).extension().and_then(|s| s.to_str()).unwrap_or("");
+                match ext.to_lowercase().as_str() {
+                    "png" => {
+                        write_png(outpath, &rgba, w, h)?;
+                        eprintln!("encoded → {} × {} px (PNG)", w, h);
+                    }
+                    _ => {
+                        let mut out = fs::File::create(outpath)?;
+                        out.write_all(&w.to_le_bytes())?;
+                        out.write_all(&h.to_le_bytes())?;
+                        out.write_all(&rgba)?;
+                        eprintln!("encoded → {} × {} px ({} bytes RGBA)", w, h, rgba.len());
+                    }
                 }
             }
         }

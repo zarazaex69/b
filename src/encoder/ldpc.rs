@@ -12,7 +12,6 @@ use crate::config::EccLevel;
 // Sparse binary matrix (CSR format)
 // ---------------------------------------------------------------------------
 
-#[derive(Clone)]
 pub struct SparseMat {
     /// Number of rows (check nodes), columns (variable nodes).
     pub rows: usize,
@@ -123,7 +122,7 @@ impl SparseMat {
 /// Row weight for the sparse A matrix (check-node degree).
 const ROW_WEIGHT: usize = 6;
 /// Max belief propagation iterations.
-const MAX_ITER: usize = 50;
+const MAX_ITER: usize = 30;
 /// Min-sum attenuation factor (0.75 is typical).
 const ATTN: f32 = 0.75;
 
@@ -195,103 +194,114 @@ impl LdpcCodec {
     pub fn decode(&self, received: &[u8], channel_llr: Option<&[f32]>) -> Vec<u8> {
         let n = self.n;
         let m = self.n - self.k;
+        let h = &self.h;
 
         // Initialize variable node LLRs from channel
-        let mut v_llr: Vec<f32> = (0..n)
+        let channel: Vec<f32> = (0..n)
             .map(|i| {
                 if let Some(llr) = channel_llr {
                     llr[i]
                 } else {
-                    // Hard decision: 0 → +10.0, 1 → -10.0
                     if get_bit(received, i) == 0 { 10.0 } else { -10.0 }
                 }
             })
             .collect();
 
-        // Check-to-variable messages c2v[r][idx] (stored flat per check node)
-        let c2v_starts: Vec<usize> = (0..=m)
-            .map(|r| if r < m { self.h.row_cols(r).len() } else { 0 })
-            .scan(0usize, |acc, x| { let s = *acc; *acc += x; Some(s) })
-            .collect();
-        let total_edges: usize = c2v_starts[m];
+        // Check-to-variable messages c2v[edge_start(r) + i]
+        let c2v_starts: Vec<usize> = {
+            let mut starts = Vec::with_capacity(m + 1);
+            let mut acc = 0usize;
+            for r in 0..m {
+                starts.push(acc);
+                acc += h.row_cols(r).len();
+            }
+            starts.push(acc);
+            starts
+        };
+        let total_edges = c2v_starts[m];
         let mut c2v = vec![0.0f32; total_edges];
 
-        // Map (row, col_idx_in_row) → edge index
-        let edge_start = |r: usize| c2v_starts[r];
-
-        // v2c scratch: variable-to-check per check node
+        // Variable-to-check messages (same layout)
         let mut v2c = vec![0.0f32; total_edges];
 
-        let channel: Vec<f32> = v_llr.clone();
+        // Per-variable: sum of all incoming c2v messages
+        let mut v_sum = vec![0.0f32; n];
+
+        // edge_start helper
+        let edge_start = |r: usize| c2v_starts[r];
 
         for _iter in 0..MAX_ITER {
             // --- Variable → Check update ---
-            // For each check node r, compute v2c[r][i] = L_ch[v] + sum of c2v except from r
+            // v2c[r][i] = channel[v] + v_sum[v] - c2v[r][i]
             for r in 0..m {
-                let cols = self.h.row_cols(r);
+                let cols = h.row_cols(r);
                 let es = edge_start(r);
                 for (i, &col) in cols.iter().enumerate() {
                     let v = col as usize;
-                    // sum all c2v messages arriving at v except from r
-                    let sum_all: f32 = self
-                        .h
-                        .col_rows(v)
-                        .iter()
-                        .enumerate()
-                        .map(|(_, &r2)| {
-                            let r2 = r2 as usize;
-                            // find edge index of v in row r2
-                            let cols2 = self.h.row_cols(r2);
-                            let pos = cols2.iter().position(|&c| c as usize == v).unwrap_or(0);
-                            c2v[edge_start(r2) + pos]
-                        })
-                        .sum();
-                    // subtract self
-                    v2c[es + i] = channel[v] + sum_all - c2v[es + i];
+                    v2c[es + i] = channel[v] + v_sum[v] - c2v[es + i];
                 }
             }
 
             // --- Check → Variable update (min-sum) ---
+            // Reset v_sum for new round
+            v_sum.fill(0.0);
+
             for r in 0..m {
-                let cols = self.h.row_cols(r);
+                let cols = h.row_cols(r);
                 let es = edge_start(r);
                 let len = cols.len();
-                // min-sum: product of signs, minimum of magnitudes
-                let prod_sign: f32 = v2c[es..es + len].iter().map(|x| x.signum()).product();
-                let min_mag: f32   = v2c[es..es + len].iter().map(|x| x.abs()).fold(f32::INFINITY, f32::min);
+                if len == 0 { continue; }
+
+                // Compute product of signs and two smallest magnitudes
+                let mut prod_sign = 1.0f32;
+                let mut min1 = f32::INFINITY;
+                let mut min2 = f32::INFINITY;
                 for i in 0..len {
-                    let sign_excl = prod_sign * v2c[es + i].signum();
-                    let mag_excl  = min_mag_excluding(&v2c[es..es + len], i) * ATTN;
-                    c2v[es + i] = sign_excl * mag_excl;
+                    let val = v2c[es + i];
+                    prod_sign *= val.signum();
+                    let abs = val.abs();
+                    if abs < min1 {
+                        min2 = min1;
+                        min1 = abs;
+                    } else if abs < min2 {
+                        min2 = abs;
+                    }
+                }
+
+                for i in 0..len {
+                    let val = v2c[es + i];
+                    let sign_excl = prod_sign * val.signum();
+                    let abs_val = val.abs();
+                    let mag_excl = if abs_val <= min1 { min2 } else { min1 };
+                    let msg = sign_excl * mag_excl * ATTN;
+                    c2v[es + i] = msg;
+                    // Add to v_sum for variable cols[i]
+                    v_sum[cols[i] as usize] += msg;
                 }
             }
 
-            // --- Posterior LLR update ---
-            for v in 0..n {
-                let sum: f32 = self
-                    .h
-                    .col_rows(v)
-                    .iter()
-                    .map(|&r| {
-                        let r = r as usize;
-                        let cols = self.h.row_cols(r);
-                        let pos = cols.iter().position(|&c| c as usize == v).unwrap_or(0);
-                        c2v[edge_start(r) + pos]
-                    })
-                    .sum();
-                v_llr[v] = channel[v] + sum;
-            }
-
             // --- Hard decision & syndrome check ---
-            let hard: Vec<u8> = (0..n).map(|i| (v_llr[i] < 0.0) as u8).collect();
-            if syndrome_ok(&self.h, &hard, m) {
-                // Extract data bits (systematic: first k bits)
+            let mut converged = true;
+            for r in 0..m {
+                let mut s = 0u8;
+                for &c in h.row_cols(r) {
+                    let v = c as usize;
+                    let llr = channel[v] + v_sum[v];
+                    s ^= (llr < 0.0) as u8;
+                }
+                if s != 0 {
+                    converged = false;
+                    break;
+                }
+            }
+            if converged {
+                let hard: Vec<u8> = (0..self.k).map(|i| ((channel[i] + v_sum[i]) < 0.0) as u8).collect();
                 return bits_to_bytes(&hard, self.k);
             }
         }
 
         // Did not converge — return best hard decision anyway
-        let hard: Vec<u8> = (0..self.k).map(|i| (v_llr[i] < 0.0) as u8).collect();
+        let hard: Vec<u8> = (0..self.k).map(|i| ((channel[i] + v_sum[i]) < 0.0) as u8).collect();
         bits_to_bytes(&hard, self.k)
     }
 }
@@ -314,34 +324,6 @@ fn set_bit(buf: &mut [u8], pos: usize, val: u8) {
         let mask = 1u8 << (pos & 7);
         *byte = (*byte & !mask) | ((val & 1) << (pos & 7));
     }
-}
-
-#[inline(always)]
-fn syndrome_ok(h: &SparseMat, bits: &[u8], m: usize) -> bool {
-    for r in 0..m {
-        let mut s = 0u8;
-        for &c in h.row_cols(r) {
-            s ^= unsafe { *bits.get_unchecked(c as usize) };
-        }
-        if s != 0 {
-            return false;
-        }
-    }
-    true
-}
-
-#[inline(always)]
-fn min_mag_excluding(slice: &[f32], exclude: usize) -> f32 {
-    let mut min = f32::INFINITY;
-    for (i, x) in slice.iter().enumerate() {
-        if i != exclude {
-            let abs = x.abs();
-            if abs < min {
-                min = abs;
-            }
-        }
-    }
-    min
 }
 
 #[inline(always)]
