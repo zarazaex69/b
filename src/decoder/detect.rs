@@ -1,6 +1,7 @@
 use crate::color::{nearest_color, Rgb};
 use crate::encoder::pattern::{FP_SIZE, fp_color};
 
+
 /// Detected finder pattern location in pixel space.
 #[derive(Debug, Clone, Copy)]
 pub struct FpLocation {
@@ -74,7 +75,7 @@ fn matches_fp(
     for mr in 0..FP_SIZE {
         for mc in 0..FP_SIZE {
             let expected_color = fp_color(fp_idx, mr, mc);
-            let expected_rgb   = palette[expected_color as usize];
+            let _expected_rgb  = palette[expected_color as usize];
             // Sample center pixel of module
             let px = col_px + mc as u32 * module_px + module_px / 2;
             let py = row_px + mr as u32 * module_px + module_px / 2;

@@ -95,7 +95,7 @@ pub fn is_reserved(r: usize, c: usize, side: usize, ap_pos: &[(usize, usize)]) -
 
 /// Place the color palette pattern (CPP) in the metadata strip next to FP0.
 /// It's a 1×N strip starting at (0, FP_SIZE + 1) encoding the palette size.
-pub fn place_cpp(mat: &mut [u8], w: usize, color_count: usize) {
+pub fn place_cpp(mat: &mut [u8], _w: usize, color_count: usize) {
     // Encode log2(color_count) as a small int in modules 7..11 of row 0
     let bpm = (color_count as u32).trailing_zeros() as u8; // 2..8
     for i in 0..4usize {
