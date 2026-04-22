@@ -159,7 +159,7 @@ pub fn gpu_render_rgba(
         label:   Some("pipe"),
         layout:  Some(&layout),
         module:  &shader,
-        entry_point: Some("main"),
+        entry_point: "main",
         compilation_options:  Default::default(),
         cache: None,
     });
