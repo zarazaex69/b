@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	jab "github.com/yourorg/b/go"
+	jab "github.com/zarazaex69/b/go"
 )
 
 func TestVersion(t *testing.T) {
