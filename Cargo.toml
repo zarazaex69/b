@@ -2,5 +2,52 @@
 name = "b"
 version = "0.1.0"
 edition = "2024"
+description = "Ultra-fast JAB code encoder/decoder with GPU acceleration and Go FFI"
+
+[lib]
+name = "b"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "b"
+path = "src/main.rs"
 
 [dependencies]
+rayon      = { version = "1.10", optional = true }
+bytemuck   = { version = "1.16", features = ["derive"] }
+thiserror  = "2.0"
+half       = "2.4"
+png        = "0.17"
+
+[dependencies.wgpu]
+version  = "22.0"
+optional = true
+
+[features]
+default  = ["parallel"]
+parallel = ["dep:rayon"]
+gpu      = ["dep:wgpu"]
+
+[profile.release]
+opt-level     = 3
+lto           = "fat"
+codegen-units = 1
+panic         = "abort"
+strip         = true
+debug         = false
+overflow-checks = false
+debug-assertions = false
+
+[profile.release.build-override]
+opt-level = 3
+
+[profile.release-turbo]
+inherits      = "release"
+opt-level     = 3
+lto           = "fat"
+codegen-units = 1
+panic         = "abort"
+strip         = true
+debug         = false
+overflow-checks = false
+debug-assertions = false
