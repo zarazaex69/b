@@ -246,3 +246,6 @@ go.work.sum
 # Added by cargo
 
 /target
+output.rgba
+test.png
+recovered.txt
