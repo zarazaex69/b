@@ -11,8 +11,10 @@ pub const MIN_SIDE: usize = 21;
 pub fn required_side(encoded_bits: usize, bpm: u8) -> usize {
     let mut side = MIN_SIDE;
     loop {
-        let ap  = pattern::alignment_positions(side).len();
-        let reserved = 4 * FP_SIZE * FP_SIZE + ap * AP_SIZE * AP_SIZE + 32; // metadata
+        let ap = pattern::alignment_positions(side).len();
+        // Reserved: 4 FPs + APs + metadata strip (2 rows * (side - 2*FP_SIZE) cols)
+        let metadata_cols = side.saturating_sub(2 * FP_SIZE);
+        let reserved = 4 * FP_SIZE * FP_SIZE + ap * AP_SIZE * AP_SIZE + 2 * metadata_cols;
         let total_modules = side * side;
         let usable = total_modules.saturating_sub(reserved);
         if usable * bpm as usize >= encoded_bits {

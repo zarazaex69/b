@@ -80,8 +80,8 @@ pub fn is_reserved(r: usize, c: usize, side: usize, ap_pos: &[(usize, usize)]) -
     {
         return true;
     }
-    // Metadata strip: rows 0-1, columns FP_SIZE+1 to FP_SIZE+20
-    if r <= 1 && c >= FP_SIZE + 1 && c < FP_SIZE + 21 {
+    // Metadata strip: rows 0-1, columns FP_SIZE+1 to side-FP_SIZE-1 (between FP0 and FP1)
+    if r <= 1 && c >= FP_SIZE + 1 && c < side - FP_SIZE {
         return true;
     }
     // Alignment patterns
@@ -95,39 +95,50 @@ pub fn is_reserved(r: usize, c: usize, side: usize, ap_pos: &[(usize, usize)]) -
 
 /// Place the color palette pattern (CPP) in the metadata strip next to FP0.
 /// It's a 1×N strip starting at (0, FP_SIZE + 1) encoding the palette size.
-pub fn place_cpp(mat: &mut [u8], _w: usize, color_count: usize) {
+pub fn place_cpp(mat: &mut [u8], w: usize, color_count: usize) {
     // Encode log2(color_count) as a small int in modules 7..11 of row 0
     let bpm = (color_count as u32).trailing_zeros() as u8; // 2..8
     for i in 0..4usize {
         let bit = (bpm >> i) & 1;
-        mat[FP_SIZE + 1 + i] = if bit == 1 { 1 } else { 0 };
+        mat[0 * w + FP_SIZE + 1 + i] = if bit == 1 { 1 } else { 0 };
     }
 }
 
 /// Place the data length (original data bytes count) in metadata strip row 1.
-/// Uses modules (1, FP_SIZE+1) to (1, FP_SIZE+16) — 16 bits = up to 65535 bytes.
+/// Uses modules between FP0 and FP1 in row 1.
+/// For a 21-module side: cols 8..14 (6 bits available). We use min(avail, 16) bits.
 pub fn place_data_len(mat: &mut [u8], w: usize, data_byte_count: usize) {
     let len = data_byte_count as u16;
+    let max_col = w.saturating_sub(FP_SIZE); // don't overwrite FP1
     for i in 0..16usize {
         let bit = (len >> i) & 1;
-        mat[w + FP_SIZE + 1 + i] = if bit == 1 { 1 } else { 0 };
+        let row = 1;
+        let col = FP_SIZE + 1 + i;
+        if col < max_col {
+            mat[row * w + col] = if bit == 1 { 1 } else { 0 };
+        }
     }
 }
 
 /// Read the data length (original data bytes) from metadata strip row 1.
 pub fn read_data_len(mat: &[u8], w: usize) -> usize {
     let mut len = 0u16;
+    let max_col = w.saturating_sub(FP_SIZE);
     for i in 0..16usize {
-        len |= ((mat[w + FP_SIZE + 1 + i] & 1) as u16) << i;
+        let row = 1;
+        let col = FP_SIZE + 1 + i;
+        if col < max_col {
+            len |= ((mat[row * w + col] & 1) as u16) << i;
+        }
     }
     len as usize
 }
 
 /// Decode color count from the CPP strip.
-pub fn read_cpp(mat: &[u8], _w: usize) -> u8 {
+pub fn read_cpp(mat: &[u8], w: usize) -> u8 {
     let mut bpm = 0u8;
     for i in 0..4usize {
-        bpm |= (mat[FP_SIZE + 1 + i] & 1) << i;
+        bpm |= (mat[0 * w + FP_SIZE + 1 + i] & 1) << i;
     }
     bpm.max(2).min(8)
 }

@@ -25,7 +25,6 @@ mod tests {
         let cfg = JabConfig::new(colors, ecc);
         let out = encode(data, &cfg).expect("encode");
         let recovered = decode_matrix(&out.symbols[0], &cfg).expect("decode");
-        // Data is recovered in the first `data.len()` bytes
         assert_eq!(&recovered[..data.len()], data,
             "round-trip failed for {:?}/{:?}", colors, ecc);
     }
@@ -72,5 +71,20 @@ mod tests {
         let cfg = JabConfig::default();
         let results = encode_parallel(&refs, &cfg).unwrap();
         assert_eq!(results.len(), 8);
+    }
+
+    #[test]
+    fn decode_from_rgba() {
+        let data = b"Hello, JAB!";
+        let cfg = JabConfig {
+            colors: ColorCount::C8,
+            ecc: EccLevel::Medium,
+            module_size: 4,
+            ..Default::default()
+        };
+
+        let (rgba, w, h) = encode_rgba(data, &cfg).expect("encode");
+        let recovered = decode(&rgba, w, h, &cfg).expect("decode from rgba should work");
+        assert_eq!(&recovered[..data.len()], &data[..]);
     }
 }

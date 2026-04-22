@@ -50,6 +50,7 @@ pub fn detect_fps(
     if found.len() < 4 {
         return None;
     }
+    
 
     // Sort into [FP0, FP1, FP2, FP3] by fp_idx
     let mut arr = [found[0], found[0], found[0], found[0]];

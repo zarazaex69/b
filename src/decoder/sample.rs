@@ -12,9 +12,12 @@ pub fn read_data_len_from_image(
     palette: &[Rgb],
 ) -> usize {
     let mod_px = geo.module_px;
+    let side = geo.side;
+    let max_col = side.saturating_sub(pattern::FP_SIZE);
     let mut len = 0u16;
     for i in 0..16usize {
         let c = pattern::FP_SIZE + 1 + i;
+        if c >= max_col { break; }
         let r = 1usize;
         let px = geo.origin_col_px + c as u32 * mod_px + mod_px / 2;
         let py = geo.origin_row_px + r as u32 * mod_px + mod_px / 2;
