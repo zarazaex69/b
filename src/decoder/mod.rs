@@ -7,7 +7,7 @@ use crate::{
     encoder::{ldpc::LdpcCodec, pattern},
     error::{JabError, Result},
 };
-use detect::{compute_geometry, detect_fps};
+use detect::{compute_geometry, detect_fps, detect_module_px};
 use sample::{modules_to_bits, modules_to_llr, read_data_len_from_image, sample_modules};
 
 #[cfg(feature = "parallel")]
@@ -17,9 +17,12 @@ use rayon::prelude::*;
 pub fn decode(rgba: &[u8], width: u32, height: u32, cfg: &JabConfig) -> Result<Vec<u8>> {
     let palette = build_palette(cfg.colors);
     let bpm     = cfg.colors.bits_per_module();
-    let mod_px  = cfg.module_size;
 
-    // 1. Detect finder patterns
+    // Auto-detect module_px by scanning for finder patterns
+    let mod_px = detect_module_px(rgba, width, height, &palette, 1, 50)
+        .ok_or(JabError::PatternNotFound)?;
+
+    // 1. Detect finder patterns with the detected scale
     let fps = detect_fps(rgba, width, height, &palette, mod_px)
         .ok_or(JabError::PatternNotFound)?;
 

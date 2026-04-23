@@ -87,4 +87,28 @@ mod tests {
         let recovered = decode(&rgba, w, h, &cfg).expect("decode from rgba should work");
         assert_eq!(&recovered[..data.len()], &data[..]);
     }
+
+    #[test]
+    fn decode_autodetect_scale() {
+        let data = b"Auto-detect scale test";
+
+        // Encode with module_size=15
+        let encode_cfg = JabConfig {
+            colors: ColorCount::C8,
+            ecc: EccLevel::Medium,
+            module_size: 15,
+            ..Default::default()
+        };
+        let (rgba, w, h) = encode_rgba(data, &encode_cfg).expect("encode");
+
+        // Decode with different module_size — should auto-detect the correct scale
+        let decode_cfg = JabConfig {
+            colors: ColorCount::C8,
+            ecc: EccLevel::Medium,
+            module_size: 5, // wrong value, should be auto-detected
+            ..Default::default()
+        };
+        let recovered = decode(&rgba, w, h, &decode_cfg).expect("decode should auto-detect scale");
+        assert_eq!(&recovered[..data.len()], &data[..]);
+    }
 }

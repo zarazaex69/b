@@ -95,6 +95,24 @@ fn matches_fp(
     true
 }
 
+/// Detect module_px by trying candidate scales and validating with detect_fps.
+/// Scans from max_px down to min_px, returns first scale where 4 FPs are found.
+pub fn detect_module_px(
+    rgba: &[u8],
+    width: u32,
+    height: u32,
+    palette: &[Rgb],
+    min_px: u32,
+    max_px: u32,
+) -> Option<u32> {
+    for candidate_px in (min_px..=max_px).rev() {
+        if detect_fps(rgba, width, height, palette, candidate_px).is_some() {
+            return Some(candidate_px);
+        }
+    }
+    None
+}
+
 /// Given four FP pixel locations, determine the module grid origin and size.
 pub struct GridGeometry {
     pub origin_row_px: u32,
