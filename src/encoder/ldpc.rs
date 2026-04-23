@@ -197,10 +197,16 @@ impl LdpcCodec {
         let h = &self.h;
 
         // Initialize variable node LLRs from channel
+        // Use hard-decision fallback if LLR array is shorter than expected (mismatched ModulePx)
         let channel: Vec<f32> = (0..n)
             .map(|i| {
                 if let Some(llr) = channel_llr {
-                    llr[i]
+                    if i < llr.len() {
+                        llr[i]
+                    } else {
+                        // Fallback: use hard-decision from received bits
+                        if get_bit(received, i) == 0 { 10.0 } else { -10.0 }
+                    }
                 } else {
                     if get_bit(received, i) == 0 { 10.0 } else { -10.0 }
                 }
